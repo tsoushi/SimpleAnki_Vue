@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title></title>
+    <meta charset="utf-8">
+    <script src="https://cdn.jsdelivr.net/npm/vue@2/dist/vue.js"></script>
+</head>
+<body>
+    <div id="question_table">
+        <div class="table_row">
+            <div class="table_cell">{{ headers.q }}</div>
+            <div class="table_cell">{{ headers.ans }}</div>
+            <div class="table_cell table_btn"></div>
+        </div>
+        <div class="table_row" v-for="q in questions" v-bind:key="q.id">
+            <div class="table_cell">{{ q.q }}</div>
+            <div class="table_cell"><span v-show="q.showAns">{{ q.ans }}</span></div>
+            <div class="table_cell table_btn" ><button v-on:click="q.showAns = true">表示</button></div>
+        </div>
+    </div>
+    <div id="control_panel">
+        <button onClick="addQuestions(10);">Next</button>
+        <button onClick="app.showAnswer();">答え</button>
+        <button onClick="app.removeQuestion();">リセット</button>
+    </div>
+    <div id="dataSelector">
+        <p>暗記ファイルを指定</p>
+        <input type="text" v-model="fileName">
+        <input type="button" v-on:click="loadFile" value="OK">
+        <p>{{ message }}
+    </div>
+
+    <div id="screenBlocker" v-show="visible">
+        <span>読み込み中</span>
+    </div>
+
+    </body>
+
+    <script>
+        let qdata;
+
+        function getRandomInt(max){
+            return Math.floor(Math.random() * max);
+        }
+        function getRandomIntRange(min, max){
+            return min + getRandomInt(max - min + 1);
+        }
+        function randomChoice(list){
+            return list[getRandomInt(list.length)];
+        }
+        function getRandomText(min, max){
+            let loopEnd = getRandomIntRange(min, max)
+            let text = ''
+            for(let i = 0; i < loopEnd; i++){
+                text += randomChoice('abcdefghijklmnopqrstuvwxyz'.split(''))
+            }
+            return text
+        }
+
+        function parseCsv(text){
+			text = text.trim()
+            let result = []
+            for(line of text.split(/\n|\r\n/)){
+                result.push(line.split(','));
+            }
+            return result;
+        }
+        async function loadQuestionData(fname){
+            screenBlocker.show();
+            app.removeQuestion();
+            try{
+                let res = await fetch('./'+fname);
+                if(res.status != 200){throw 'ファイルの読み込みに失敗';}
+                let parsed = parseCsv(await res.text());
+                qdata = {
+                    headers: {"q": parsed[0][0], "ans": parsed[0][1]},
+                    contents:
+                        parsed.slice(1).map((value)=>{
+                            return {"q": value[0], "ans": value[1]}
+                        })
+                }
+            } catch(e) {
+                console.error(e);
+                screenBlocker.hide();
+                throw e;
+            }
+            app.setHeaders(qdata.headers.q, qdata.headers.ans);
+            screenBlocker.hide();
+        }
+
+        function addQuestions(num){
+            for(let i = 0; i < num; i++){
+                let item = randomChoice(qdata.contents);
+                app.addQuestion(item.q, item.ans);
+            }
+        }
+
+        let app = new Vue({
+            el: "#question_table",
+            data: {
+                headers: {q: "", ans: ""},
+                currentId: 0,
+                questions: []
+            },
+            methods: {
+                setHeaders: function(q, ans){
+                    this.headers.q = q;
+                    this.headers.ans = ans;
+                },
+                addQuestion: function(q, ans){
+                    this.questions.push({"id": this.currentId++, "q": q, "ans": ans, "showAns": false});
+                },
+                getIndexById: function(id){
+                    for(let i = 0; i < this.qestions.length; i++){
+                        if(this.qestions[i].id == id){
+                            return i;
+                        }
+                    }
+                    return null;
+                },
+                showAnswer: function(id=null){
+                    if(id === null){
+                        for(let q of this.questions){
+                            q.showAns = true
+                        }
+                    } else {
+                        let index = this.getIndexById(id);
+                        if(index !== null){
+                            this.questions[index].showAns = true;
+                        }
+                    }
+                },
+                removeQuestion: function(id=null){
+                    if(id === null){
+                        this.questions = []
+                    } else {
+                        let index = this.getIndexById(id);
+                        if(index !== null){
+                            this.questions.splice(index);
+                        }
+                    }
+                }
+            }
+        });
+
+        let dataSelector = new Vue({
+            el: "#dataSelector",
+            data: {
+                fileName: "",
+                message: ""
+            },
+            methods: {
+                loadFile: function(){
+                    loadQuestionData(this.fileName).then(()=>{addQuestions(10);}).catch(()=>{this.message = 'ファイルの読み込みに失敗しました';});
+                }
+            }
+        });
+
+        let screenBlocker = new Vue({
+            el: "#screenBlocker",
+            data: {
+                visible: false
+            },
+            methods: {
+                show: function(){
+                    this.visible = true;
+                },
+                hide: function(){
+                    this.visible = false;
+                }
+            }
+        });
+
+        async function main(){
+            await loadQuestionData('kenchou');
+            addQuestions(10);
+        }
+        main();
+
+    </script>
+    <style>
+        html{
+            font-size: 2rem;
+            text-align: center;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        input{
+            font-size: 1rem;
+        }
+        button{
+            font-size: 1rem;
+        }
+        .table_row{
+            display: table;
+            width: 100%;
+        }
+        .table_cell{
+            display: table-cell;
+            border: solid 1px #000;
+        }
+        #question_table .table_cell{
+            width: 45%;
+        }
+        #question_table .table_btn{
+            width: 10%;
+        }
+        #question_table .table_btn button{
+            width: 100%;
+            font-size: 20px;
+        }
+        #question_table{
+            width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        #screenBlocker{
+            position: fixed;
+            top: 0px;
+            left: 0px;
+            width: 100%;
+            height: 100%;
+            background: #9999;
+        }
+        #screenBlocker span{
+            font-size: 5rem;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100%;
+            text-align: center;
+        }
+
+        @media (orientation: portrait){
+            html{
+                font-size: 4rem;
+            }
+            #question_table{
+                width: 100%;
+            }
+            #question_table .table_btn button{
+                font-size: 0.5rem;
+            }
+        }
+</body>
+</html>
